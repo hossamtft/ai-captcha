@@ -23,58 +23,47 @@ def save_log(entry):
     with open(LOGS_FILE, 'w') as f:
         json.dump(logs, f, indent=2)
 
-def generate_temporal_challenge(difficulty='medium'):
+def generate_temporal_challenge():
     seed = random.randint(1, 1000000)
     random.seed(seed)
     
-    if difficulty == 'easy':
-        total_duration = random.randint(5000, 7000)
-        zone_width = random.randint(400, 600)
-        flicker_speed = 800
-    elif difficulty == 'hard':
-        total_duration = random.randint(3000, 5000)
-        zone_width = random.randint(150, 250)
-        flicker_speed = 250
-    else:
-        total_duration = random.randint(4000, 6000)
-        zone_width = random.randint(250, 400)
-        flicker_speed = 400
-    
-    zone_start_pct = random.uniform(0.20, 0.70)
+    total_duration = random.randint(4000, 7000)
+    zone_width = random.randint(250, 450)
+    zone_start_pct = random.uniform(0.25, 0.65)
     zone_start = int(total_duration * zone_start_pct)
+    flicker_speed = random.randint(300, 500)
+    
+    speed_segments = []
+    remaining = total_duration
+    while remaining > 0:
+        segment_duration = min(random.randint(400, 1200), remaining)
+        speed_multiplier = random.uniform(0.5, 2.0)
+        speed_segments.append({"duration": segment_duration, "speed": round(speed_multiplier, 2)})
+        remaining -= segment_duration
     
     challenge_id = str(uuid.uuid4())
     challenge = {
         "challenge_id": challenge_id,
         "type": "temporal",
-        "difficulty": difficulty,
         "seed": seed,
         "total_duration": total_duration,
         "zone_start": zone_start,
         "zone_width": zone_width,
         "flicker_speed": flicker_speed,
-        "tolerance": 80 if difficulty == 'hard' else 120,
+        "speed_segments": speed_segments,
+        "tolerance": 100,
         "created_at": datetime.utcnow().isoformat()
     }
     active_challenges[challenge_id] = challenge
     return challenge
 
-def generate_behavioural_challenge(difficulty='medium'):
+def generate_behavioural_challenge():
     seed = random.randint(1, 1000000)
     random.seed(seed)
     
-    if difficulty == 'easy':
-        num_waypoints = random.randint(3, 4)
-        min_distance = 100
-        time_limit = 15000
-    elif difficulty == 'hard':
-        num_waypoints = random.randint(6, 8)
-        min_distance = 70
-        time_limit = 8000
-    else:
-        num_waypoints = random.randint(4, 6)
-        min_distance = 85
-        time_limit = 12000
+    num_waypoints = random.randint(4, 6)
+    min_distance = 85
+    time_limit = 12000
     
     waypoints = []
     for _ in range(num_waypoints):
@@ -88,7 +77,6 @@ def generate_behavioural_challenge(difficulty='medium'):
     challenge = {
         "challenge_id": challenge_id,
         "type": "behavioural",
-        "difficulty": difficulty,
         "seed": seed,
         "waypoints": waypoints,
         "canvas_width": 600,
@@ -147,11 +135,9 @@ def extract_features(trajectory):
         x1, y1 = trajectory[i-2]["x"], trajectory[i-2]["y"]
         x2, y2 = trajectory[i-1]["x"], trajectory[i-1]["y"]
         x3, y3 = trajectory[i]["x"], trajectory[i]["y"]
-        
         a = math.sqrt((x2-x1)**2 + (y2-y1)**2)
         b = math.sqrt((x3-x2)**2 + (y3-y2)**2)
         c = math.sqrt((x3-x1)**2 + (y3-y1)**2)
-        
         if a > 0.5 and b > 0.5:
             area = 0.5 * abs((x2-x1)*(y3-y1) - (x3-x1)*(y2-y1))
             if a * b > 0:
@@ -159,7 +145,6 @@ def extract_features(trajectory):
     
     curv_mean = sum(curvatures) / len(curvatures) if curvatures else 0
     curv_var = sum((c - curv_mean)**2 for c in curvatures) / len(curvatures) if curvatures else 0
-    
     accel_mean = sum(accelerations) / len(accelerations) if accelerations else 0
     accel_var = sum((a - accel_mean)**2 for a in accelerations) / len(accelerations) if accelerations else 0
     
@@ -180,33 +165,26 @@ def extract_features(trajectory):
         "points": len(trajectory)
     }
 
-def classify_trajectory(features, difficulty='medium'):
+def classify_trajectory(features):
     if not features:
         return False, 0, ["No trajectory data"]
     
     score = 100
     reasons = []
     
-    thresholds = {
-        'easy': {'ratio': 1.03, 'vel_std': 0.08, 'dir': 2, 'curv': 0.008},
-        'medium': {'ratio': 1.05, 'vel_std': 0.12, 'dir': 3, 'curv': 0.01},
-        'hard': {'ratio': 1.08, 'vel_std': 0.15, 'dir': 4, 'curv': 0.015}
-    }
-    t = thresholds.get(difficulty, thresholds['medium'])
-    
-    if features["path_ratio"] < t['ratio']:
+    if features["path_ratio"] < 1.08:
         score -= 35
         reasons.append("Path too direct")
     
-    if features["velocity_std"] < t['vel_std']:
+    if features["velocity_std"] < 0.15:
         score -= 30
         reasons.append("Velocity too consistent")
     
-    if features["direction_changes"] < t['dir']:
+    if features["direction_changes"] < 4:
         score -= 20
         reasons.append("Too few direction changes")
     
-    if features["curvature_variance"] < t['curv']:
+    if features["curvature_variance"] < 0.015:
         score -= 15
         reasons.append("Curvature too uniform")
     
@@ -218,41 +196,61 @@ def classify_trajectory(features, difficulty='medium'):
         score -= 10
         reasons.append("Acceleration too smooth")
     
-    if features["path_ratio"] > 1.2:
-        score = min(100, score + 15)
-    if features["velocity_std"] > 0.25:
+    if features["path_ratio"] > 1.25:
         score = min(100, score + 10)
-    if features["direction_changes"] > 8:
-        score = min(100, score + 5)
-    if features["pause_count"] >= 2:
+    if features["velocity_std"] > 0.3:
+        score = min(100, score + 10)
+    if features["direction_changes"] > 10:
         score = min(100, score + 5)
     
     return score >= 50, max(0, min(100, score)), reasons
+
+def real_to_visual_time(real_time, speed_segments):
+    visual_time = 0
+    remaining_real = real_time
+
+    for seg in speed_segments:
+        real_duration_of_segment = seg["duration"] / seg["speed"]
+        
+        if remaining_real <= real_duration_of_segment:
+            visual_time += remaining_real * seg["speed"]
+            return visual_time
+        else:
+            visual_time += seg["duration"]
+            remaining_real -= real_duration_of_segment
+    
+    return visual_time
 
 def verify_temporal(challenge_id, press_time, release_time):
     if challenge_id not in active_challenges:
         return {"success": False, "message": "Challenge expired"}
     
     c = active_challenges[challenge_id]
-    hold = release_time - press_time
-    zone_end = c["zone_start"] + c["zone_width"]
-    tolerance = c.get("tolerance", 100)
+    real_hold = release_time - press_time
     
-    in_zone = (c["zone_start"] - tolerance) <= hold <= (zone_end + tolerance)
+    visual_hold = real_to_visual_time(real_hold, c["speed_segments"])
     
-    accuracy = 0
+    zone_start = c["zone_start"]
+    zone_end = zone_start + c["zone_width"]
+    
+    # Strict check - must be within the actual green zone
+    in_zone = zone_start <= visual_hold <= zone_end
+    
+    # Calculate accuracy (100% = center of zone, 0% = edge of zone)
     if in_zone:
-        zone_center = c["zone_start"] + c["zone_width"] / 2
-        distance_from_center = abs(hold - zone_center)
-        max_distance = c["zone_width"] / 2 + tolerance
-        accuracy = max(0, 100 - (distance_from_center / max_distance * 100))
+        zone_center = zone_start + c["zone_width"] / 2
+        distance_from_center = abs(visual_hold - zone_center)
+        max_distance = c["zone_width"] / 2
+        accuracy = max(0, 100 - (distance_from_center / max_distance * 100)) if max_distance > 0 else 100
+    else:
+        accuracy = 0
     
     save_log({
         "challenge_id": challenge_id,
         "type": "temporal",
-        "difficulty": c["difficulty"],
         "result": "pass" if in_zone else "fail",
-        "hold_time": hold,
+        "real_hold_time": real_hold,
+        "visual_hold_time": round(visual_hold, 1),
         "accuracy": round(accuracy, 1),
         "created_at": datetime.utcnow().isoformat()
     })
@@ -261,10 +259,11 @@ def verify_temporal(challenge_id, press_time, release_time):
     
     return {
         "success": in_zone,
-        "message": f"Perfect timing! {accuracy:.0f}% accuracy" if in_zone else "Missed the zone",
-        "hold_time": hold,
+        "message": f"{accuracy:.0f}% accuracy" if in_zone else "Missed the zone",
         "accuracy": round(accuracy, 1),
-        "zone": {"start": c["zone_start"], "end": zone_end}
+        "hold_time": real_hold,
+        "visual_time": round(visual_hold, 1),
+        "zone": {"start": zone_start, "end": zone_end}
     }
 
 def verify_behavioural(challenge_id, trajectory):
@@ -288,19 +287,17 @@ def verify_behavioural(challenge_id, trajectory):
     
     in_order = next_wp == len(c["waypoints"])
     features = extract_features(trajectory)
-    is_human, confidence, reasons = classify_trajectory(features, c["difficulty"])
+    is_human, confidence, reasons = classify_trajectory(features)
     success = in_order and is_human
     
     save_log({
         "challenge_id": challenge_id,
         "type": "behavioural",
-        "difficulty": c["difficulty"],
         "result": "pass" if success else "fail",
         "confidence": confidence,
         "waypoints_hit": sum(visited),
         "in_order": in_order,
         "time": features["total_time"] if features else 0,
-        "features": features,
         "created_at": datetime.utcnow().isoformat()
     })
     
@@ -314,8 +311,7 @@ def verify_behavioural(challenge_id, trajectory):
         "message": f"Human verified! {confidence}% confidence" if success else "Movement pattern flagged",
         "confidence": confidence,
         "is_human": is_human,
-        "reasons": reasons if not is_human else ["Natural movement detected"],
-        "features": features
+        "reasons": reasons if not is_human else ["Natural movement detected"]
     }
 
 @app.route('/')
@@ -328,13 +324,11 @@ def static_files(path):
 
 @app.route('/api/challenges/temporal', methods=['GET'])
 def get_temporal():
-    difficulty = request.args.get('difficulty', 'medium')
-    return jsonify(generate_temporal_challenge(difficulty))
+    return jsonify(generate_temporal_challenge())
 
 @app.route('/api/challenges/behavioural', methods=['GET'])
 def get_behavioural():
-    difficulty = request.args.get('difficulty', 'medium')
-    return jsonify(generate_behavioural_challenge(difficulty))
+    return jsonify(generate_behavioural_challenge())
 
 @app.route('/api/challenges/temporal', methods=['POST'])
 def post_temporal():

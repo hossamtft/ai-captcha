@@ -1,6 +1,4 @@
 const API = '';
-let temporalDifficulty = 'medium';
-let behaviouralDifficulty = 'medium';
 
 const state = {
     temporal: { challenge: null, isHolding: false, pressTime: 0, startTime: 0, animFrame: null },
@@ -39,24 +37,6 @@ document.addEventListener('DOMContentLoaded', () => {
         c.addEventListener('click', () => document.querySelector(`[data-section="${c.dataset.challenge}"]`).click());
     });
 
-    document.querySelectorAll('#temporal .diff-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            document.querySelectorAll('#temporal .diff-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            temporalDifficulty = btn.dataset.diff;
-            loadTemporal();
-        });
-    });
-
-    document.querySelectorAll('#behavioural .diff-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            document.querySelectorAll('#behavioural .diff-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            behaviouralDifficulty = btn.dataset.diff;
-            loadBehavioural();
-        });
-    });
-
     const btn = document.getElementById('temporal-btn');
     btn.addEventListener('mousedown', startTemporal);
     btn.addEventListener('mouseup', endTemporal);
@@ -72,8 +52,8 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 async function loadTemporal() {
-    const c = await api(`/api/challenges/temporal?difficulty=${temporalDifficulty}`);
-    state.temporal = { challenge: c, isHolding: false, pressTime: 0, startTime: 0, animFrame: null };
+    const c = await api('/api/challenges/temporal');
+    state.temporal = { challenge: c, isHolding: false, pressTime: 0, startTime: 0, animFrame: null, visualTime: 0 };
 
     const zone = document.getElementById('temporal-zone');
     zone.style.left = (c.zone_start / c.total_duration * 100) + '%';
@@ -86,9 +66,8 @@ async function loadTemporal() {
     document.getElementById('duration-label').textContent = (c.total_duration / 1000).toFixed(1) + 's';
     document.getElementById('temporal-btn').classList.remove('holding');
     document.getElementById('temporal-btn').querySelector('.btn-text').textContent = 'HOLD';
-    document.getElementById('accuracy-display').classList.remove('show');
-    document.getElementById('accuracy-circle').style.strokeDashoffset = 283;
-    document.getElementById('accuracy-value').textContent = '--%';
+    document.getElementById('temporal-confidence-fill').style.width = '0%';
+    document.getElementById('temporal-confidence-text').textContent = '--';
 }
 
 function startTemporal() {
@@ -96,6 +75,8 @@ function startTemporal() {
     state.temporal.isHolding = true;
     state.temporal.pressTime = Date.now();
     state.temporal.startTime = performance.now();
+    state.temporal.visualTime = 0;
+    state.temporal.lastFrame = performance.now();
     document.getElementById('temporal-btn').classList.add('holding');
     document.getElementById('temporal-btn').querySelector('.btn-text').textContent = 'HOLDING...';
     animateTemporal();
@@ -104,21 +85,38 @@ function startTemporal() {
 function animateTemporal() {
     if (!state.temporal.isHolding) return;
     const c = state.temporal.challenge;
-    const elapsed = performance.now() - state.temporal.startTime;
-    const progress = Math.min(elapsed / c.total_duration, 1);
+    const now = performance.now();
+    const frameDelta = now - state.temporal.lastFrame;
+    state.temporal.lastFrame = now;
 
-    document.getElementById('temporal-indicator').style.left = (progress * 100) + '%';
-    document.getElementById('timer-text').textContent = (elapsed / 1000).toFixed(2) + 's';
+    const realElapsed = now - state.temporal.startTime;
+
+    let cumulativeTime = 0;
+    let currentSpeed = 1;
+    for (const seg of c.speed_segments) {
+        if (realElapsed < cumulativeTime + seg.duration / seg.speed) {
+            currentSpeed = seg.speed;
+            break;
+        }
+        cumulativeTime += seg.duration / seg.speed;
+    }
+
+    state.temporal.visualTime += frameDelta * currentSpeed;
+    const visualProgress = Math.min(state.temporal.visualTime / c.total_duration, 1);
+
+    document.getElementById('temporal-indicator').style.left = (visualProgress * 100) + '%';
+    document.getElementById('timer-text').textContent = (realElapsed / 1000).toFixed(2) + 's';
 
     const zone = document.getElementById('temporal-zone');
+    const visualTimeMs = state.temporal.visualTime;
     const zoneEnd = c.zone_start + c.zone_width;
-    if (elapsed >= c.zone_start && elapsed <= zoneEnd) {
+    if (visualTimeMs >= c.zone_start && visualTimeMs <= zoneEnd) {
         zone.classList.add('zone-active');
     } else {
         zone.classList.remove('zone-active');
     }
 
-    if (progress < 1) {
+    if (visualProgress < 1) {
         state.temporal.animFrame = requestAnimationFrame(animateTemporal);
     } else {
         endTemporal();
@@ -140,18 +138,19 @@ async function endTemporal() {
         release_time: hold
     });
 
-    document.getElementById('accuracy-display').classList.add('show');
-    const circle = document.getElementById('accuracy-circle');
-    const offset = 283 - (283 * (r.accuracy || 0) / 100);
-    circle.style.strokeDashoffset = offset;
-    document.getElementById('accuracy-value').textContent = (r.accuracy || 0).toFixed(0) + '%';
+    // Update confidence bar with accuracy percentage
+    const fill = document.getElementById('temporal-confidence-fill');
+    const text = document.getElementById('temporal-confidence-text');
+    const accuracy = r.accuracy || 0;
+    fill.style.width = accuracy + '%';
+    text.textContent = accuracy.toFixed(0) + '% Accuracy';
 
     showModal(r.success, r.success ? 'Perfect!' : 'Missed!', r.message);
 }
 
 async function loadBehavioural() {
     if (state.behavioural.timerInterval) clearInterval(state.behavioural.timerInterval);
-    const c = await api(`/api/challenges/behavioural?difficulty=${behaviouralDifficulty}`);
+    const c = await api('/api/challenges/behavioural');
     state.behavioural = { challenge: c, isActive: false, trajectory: [], visited: new Array(c.waypoints.length).fill(false), startTime: 0, timerInterval: null };
 
     document.getElementById('canvas-overlay').classList.remove('hidden');

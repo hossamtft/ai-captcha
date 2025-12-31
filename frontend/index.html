@@ -1,21 +1,18 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI-Proof CAPTCHA</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <title>AI-Proof CAPTCHA System</title>
     <link rel="stylesheet" href="css/style.css">
 </head>
+
 <body>
-    <div class="noise-overlay"></div>
-    
+
     <nav class="nav">
         <div class="nav-brand">
-            <span class="brand-icon">🛡️</span>
-            <span class="brand-text">AI-PROOF</span>
+            <span class="brand-text">AI-PROOF CAPTCHA</span>
         </div>
         <div class="nav-links">
             <a href="#" class="nav-link active" data-section="home">Home</a>
@@ -27,31 +24,16 @@
     <main class="main-content">
         <section id="home" class="section active">
             <div class="hero">
-                <span class="hero-badge">Next-Gen Security</span>
-                <h1 class="hero-title">
-                    <span class="title-line">Human Verification</span>
-                    <span class="title-line gradient-text">AI Cannot Solve</span>
-                </h1>
-                <p class="hero-subtitle">Advanced CAPTCHA system using temporal perception and behavioural analysis to distinguish humans from AI.</p>
-                
+                <h1 class="hero-title">AI-Proof CAPTCHA System</h1>
+
                 <div class="challenge-cards">
                     <div class="challenge-card" data-challenge="temporal">
-                        <span class="card-icon">⏱️</span>
-                        <h3>Temporal Perception</h3>
-                        <p>Test your timing precision by releasing in the target zone. Three difficulty levels available.</p>
-                        <div class="card-features">
-                            <span class="feature-tag">Reflex Test</span>
-                            <span class="feature-tag">Accuracy Score</span>
-                        </div>
+                        <h3>Temporal</h3>
+                        <p>Release the button when the indicator is in the green zone.</p>
                     </div>
                     <div class="challenge-card" data-challenge="behavioural">
-                        <span class="card-icon">🖱️</span>
-                        <h3>Motor Behavioural</h3>
-                        <p>Navigate through waypoints while your movement is analyzed for human-like patterns.</p>
-                        <div class="card-features">
-                            <span class="feature-tag">Trajectory Analysis</span>
-                            <span class="feature-tag">Time Limit</span>
-                        </div>
+                        <h3>Behavioural</h3>
+                        <p>Move your cursor through all waypoints in order.</p>
                     </div>
                 </div>
             </div>
@@ -62,20 +44,14 @@
                 <div class="challenge-header">
                     <span class="challenge-badge">Challenge 01</span>
                     <h2>Temporal Perception</h2>
-                    <p>Hold the button and release when the indicator enters the green zone</p>
+                    <p>Hold the button and release when the indicator enters the green zone (speed varies!)</p>
                 </div>
-                
-                <div class="difficulty-selector">
-                    <button class="diff-btn" data-diff="easy">Easy</button>
-                    <button class="diff-btn active" data-diff="medium">Medium</button>
-                    <button class="diff-btn" data-diff="hard">Hard</button>
-                </div>
-                
+
                 <div class="temporal-challenge">
                     <div class="timer-display">
                         <span id="timer-text">0.00s</span>
                     </div>
-                    
+
                     <div class="progress-container">
                         <div class="progress-track">
                             <div class="progress-zone" id="temporal-zone"></div>
@@ -86,29 +62,20 @@
                             <span id="duration-label">0.0s</span>
                         </div>
                     </div>
-                    
+
                     <button class="temporal-button" id="temporal-btn">
                         <span class="btn-text">HOLD</span>
                         <span class="btn-subtext">Press and hold to begin</span>
                     </button>
-                    
-                    <div class="accuracy-display" id="accuracy-display">
-                        <div class="accuracy-ring">
-                            <svg viewBox="0 0 100 100">
-                                <circle cx="50" cy="50" r="45" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="8"/>
-                                <circle cx="50" cy="50" r="45" fill="none" stroke="url(#gradient)" stroke-width="8" stroke-linecap="round" stroke-dasharray="283" stroke-dashoffset="283" id="accuracy-circle"/>
-                                <defs>
-                                    <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                                        <stop offset="0%" stop-color="#00ff88"/>
-                                        <stop offset="100%" stop-color="#00ccff"/>
-                                    </linearGradient>
-                                </defs>
-                            </svg>
-                            <span class="accuracy-value" id="accuracy-value">--%</span>
+
+                    <div class="confidence-display" id="temporal-confidence">
+                        <div class="confidence-bar">
+                            <div class="confidence-fill" id="temporal-confidence-fill"></div>
                         </div>
+                        <span class="confidence-text" id="temporal-confidence-text">--</span>
                     </div>
                 </div>
-                
+
                 <button class="retry-btn" id="temporal-retry">↻ New Challenge</button>
             </div>
         </section>
@@ -120,18 +87,13 @@
                     <h2>Motor Behavioural</h2>
                     <p>Move through all waypoints in order as naturally as possible</p>
                 </div>
-                
-                <div class="difficulty-selector">
-                    <button class="diff-btn" data-diff="easy">Easy</button>
-                    <button class="diff-btn active" data-diff="medium">Medium</button>
-                    <button class="diff-btn" data-diff="hard">Hard</button>
-                </div>
-                
+
                 <div class="behavioural-challenge">
                     <div class="challenge-info">
                         <div class="info-item">
                             <span class="info-label">Waypoints</span>
-                            <span class="info-value"><span id="waypoints-visited">0</span>/<span id="waypoints-total">0</span></span>
+                            <span class="info-value"><span id="waypoints-visited">0</span>/<span
+                                    id="waypoints-total">0</span></span>
                         </div>
                         <div class="info-item">
                             <span class="info-label">Time</span>
@@ -142,12 +104,12 @@
                             <span class="info-value"><span id="time-limit">12</span>s</span>
                         </div>
                     </div>
-                    
+
                     <div class="canvas-wrapper">
                         <canvas id="behavioural-canvas" width="600" height="400"></canvas>
                         <div class="canvas-overlay" id="canvas-overlay">Click to Start</div>
                     </div>
-                    
+
                     <div class="confidence-display" id="confidence-display">
                         <div class="confidence-bar">
                             <div class="confidence-fill" id="confidence-fill"></div>
@@ -155,7 +117,7 @@
                         <span class="confidence-text" id="confidence-text">--% Human</span>
                     </div>
                 </div>
-                
+
                 <button class="retry-btn" id="behavioural-retry">↻ New Challenge</button>
             </div>
         </section>
@@ -172,4 +134,5 @@
 
     <script src="js/app.js"></script>
 </body>
+
 </html>
