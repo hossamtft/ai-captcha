@@ -58,7 +58,6 @@ async function loadTemporal() {
     const zone = document.getElementById('temporal-zone');
     zone.style.left = (c.zone_start / c.total_duration * 100) + '%';
     zone.style.width = (c.zone_width / c.total_duration * 100) + '%';
-    zone.style.animationDuration = c.flicker_speed + 'ms';
     zone.classList.remove('zone-active');
 
     document.getElementById('temporal-indicator').style.left = '0%';
@@ -158,7 +157,6 @@ async function loadBehavioural() {
     document.getElementById('waypoints-visited').textContent = '0';
     document.getElementById('time-elapsed').textContent = '0.0';
     document.getElementById('time-limit').textContent = (c.time_limit / 1000).toFixed(0);
-    document.getElementById('confidence-display').classList.remove('show');
     document.getElementById('confidence-fill').style.width = '0%';
     document.getElementById('confidence-text').textContent = '--% Human';
     drawBehavioural();
@@ -191,14 +189,13 @@ function handleMove(e) {
     state.behavioural.trajectory.push({ x, y, t });
 
     const c = state.behavioural.challenge;
-    let nextRequired = state.behavioural.visited.findIndex(v => !v);
-    if (nextRequired >= 0 && nextRequired < c.waypoints.length) {
-        const wp = c.waypoints[nextRequired];
-        if (Math.sqrt((x - wp.x) ** 2 + (y - wp.y) ** 2) <= 28) {
-            state.behavioural.visited[nextRequired] = true;
+    // Allow collecting waypoints in any order
+    c.waypoints.forEach((wp, i) => {
+        if (!state.behavioural.visited[i] && Math.sqrt((x - wp.x) ** 2 + (y - wp.y) ** 2) <= 28) {
+            state.behavioural.visited[i] = true;
             document.getElementById('waypoints-visited').textContent = state.behavioural.visited.filter(v => v).length;
         }
-    }
+    });
 
     drawBehavioural();
 
@@ -253,22 +250,18 @@ function drawBehavioural() {
         ctx.shadowBlur = 0;
     }
 
-    let nextRequired = state.behavioural.visited.findIndex(v => !v);
+    // All unvisited waypoints look the same since order doesn't matter
     c.waypoints.forEach((wp, i) => {
         const visited = state.behavioural.visited[i];
-        const isNext = i === nextRequired;
 
         ctx.beginPath();
         ctx.arc(wp.x, wp.y, 28, 0, Math.PI * 2);
         if (visited) {
             ctx.fillStyle = 'rgba(0,255,136,0.3)';
             ctx.strokeStyle = '#00ff88';
-        } else if (isNext) {
+        } else {
             ctx.fillStyle = 'rgba(255,170,0,0.2)';
             ctx.strokeStyle = '#ffaa00';
-        } else {
-            ctx.fillStyle = 'rgba(255,255,255,0.05)';
-            ctx.strokeStyle = 'rgba(255,255,255,0.2)';
         }
         ctx.fill();
         ctx.lineWidth = 2;
@@ -276,7 +269,7 @@ function drawBehavioural() {
 
         ctx.beginPath();
         ctx.arc(wp.x, wp.y, 10, 0, Math.PI * 2);
-        ctx.fillStyle = visited ? '#00ff88' : (isNext ? '#ffaa00' : '#fff');
+        ctx.fillStyle = visited ? '#00ff88' : '#ffaa00';
         ctx.fill();
 
         ctx.fillStyle = '#0a0a0f';
