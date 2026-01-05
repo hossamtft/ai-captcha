@@ -53,11 +53,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
 async function loadTemporal() {
     const c = await api('/api/challenges/temporal');
-    state.temporal = { challenge: c, isHolding: false, pressTime: 0, startTime: 0, animFrame: null, visualTime: 0 };
+    // SECURITY: Server no longer sends speed_segments, zone_start, zone_width
+    // Client runs "blind" - only knows total duration, not where the green zone is
+    state.temporal = {
+        challenge: c,
+        isHolding: false,
+        pressTime: 0,
+        startTime: 0,
+        animFrame: null,
+        visualTime: 0,
+        nonce: c.nonce  // Store nonce for replay attack prevention
+    };
 
+    // SECURITY: Zone position is hidden - show a placeholder or mystery zone
     const zone = document.getElementById('temporal-zone');
-    zone.style.left = (c.zone_start / c.total_duration * 100) + '%';
-    zone.style.width = (c.zone_width / c.total_duration * 100) + '%';
+    zone.style.left = '30%';  // Fixed visual position (actual is server-side)
+    zone.style.width = '20%'; // Fixed visual width (actual is server-side)
     zone.classList.remove('zone-active');
 
     document.getElementById('temporal-indicator').style.left = '0%';
@@ -90,26 +101,18 @@ function animateTemporal() {
 
     const realElapsed = now - state.temporal.startTime;
 
-    let cumulativeTime = 0;
-    let currentSpeed = 1;
-    for (const seg of c.speed_segments) {
-        if (realElapsed < cumulativeTime + seg.duration / seg.speed) {
-            currentSpeed = seg.speed;
-            break;
-        }
-        cumulativeTime += seg.duration / seg.speed;
-    }
-
-    state.temporal.visualTime += frameDelta * currentSpeed;
-    const visualProgress = Math.min(state.temporal.visualTime / c.total_duration, 1);
+    // SECURITY: No access to speed_segments - run at constant visual speed
+    // Server will calculate actual visual time based on speed segments during verification
+    const visualProgress = Math.min(realElapsed / c.total_duration, 1);
+    state.temporal.visualTime = realElapsed;
 
     document.getElementById('temporal-indicator').style.left = (visualProgress * 100) + '%';
     document.getElementById('timer-text').textContent = (realElapsed / 1000).toFixed(2) + 's';
 
+    // SECURITY: Zone activation is hidden - we don't know the true zone boundaries
+    // Just show a pulsing effect near the middle as a hint
     const zone = document.getElementById('temporal-zone');
-    const visualTimeMs = state.temporal.visualTime;
-    const zoneEnd = c.zone_start + c.zone_width;
-    if (visualTimeMs >= c.zone_start && visualTimeMs <= zoneEnd) {
+    if (visualProgress > 0.25 && visualProgress < 0.75) {
         zone.classList.add('zone-active');
     } else {
         zone.classList.remove('zone-active');
@@ -131,8 +134,10 @@ async function endTemporal() {
     document.getElementById('temporal-btn').classList.remove('holding');
     document.getElementById('temporal-btn').querySelector('.btn-text').textContent = 'HOLD';
 
+    // SECURITY: Include nonce to prevent replay attacks
     const r = await api('/api/challenges/temporal', 'POST', {
         challenge_id: state.temporal.challenge.challenge_id,
+        nonce: state.temporal.nonce,
         press_time: 0,
         release_time: hold
     });
@@ -150,16 +155,52 @@ async function endTemporal() {
 async function loadBehavioural() {
     if (state.behavioural.timerInterval) clearInterval(state.behavioural.timerInterval);
     const c = await api('/api/challenges/behavioural');
-    state.behavioural = { challenge: c, isActive: false, trajectory: [], visited: new Array(c.waypoints.length).fill(false), startTime: 0, timerInterval: null };
+
+    // SECURITY: Server no longer sends waypoints array
+    // We fetch waypoints sequentially via /api/challenges/behavioural/{id}/waypoint/{index}
+    state.behavioural = {
+        challenge: c,
+        isActive: false,
+        trajectory: [],
+        waypoints: [],  // Will be populated sequentially
+        visited: new Array(c.num_waypoints).fill(false),
+        startTime: 0,
+        timerInterval: null,
+        nonce: c.nonce,  // Store nonce for replay attack prevention
+        nextWaypointToFetch: 0
+    };
+
+    // Fetch the first waypoint to start
+    await fetchNextWaypoint();
 
     document.getElementById('canvas-overlay').classList.remove('hidden');
-    document.getElementById('waypoints-total').textContent = c.waypoints.length;
+    document.getElementById('waypoints-total').textContent = c.num_waypoints;
     document.getElementById('waypoints-visited').textContent = '0';
     document.getElementById('time-elapsed').textContent = '0.0';
     document.getElementById('time-limit').textContent = (c.time_limit / 1000).toFixed(0);
     document.getElementById('confidence-fill').style.width = '0%';
     document.getElementById('confidence-text').textContent = '--% Human';
     drawBehavioural();
+}
+
+async function fetchNextWaypoint() {
+    // SECURITY: Fetch waypoints one at a time from server
+    const c = state.behavioural.challenge;
+    const index = state.behavioural.nextWaypointToFetch;
+
+    if (index >= c.num_waypoints) return null;
+
+    try {
+        const wp = await api(`/api/challenges/behavioural/${c.challenge_id}/waypoint/${index}`);
+        if (wp && !wp.error) {
+            state.behavioural.waypoints.push({ x: wp.x, y: wp.y });
+            state.behavioural.nextWaypointToFetch = index + 1;
+            return wp;
+        }
+    } catch (e) {
+        console.error('Failed to fetch waypoint:', e);
+    }
+    return null;
 }
 
 function startBehavioural() {
@@ -179,7 +220,7 @@ function startBehavioural() {
     }, 100);
 }
 
-function handleMove(e) {
+async function handleMove(e) {
     if (!state.behavioural.isActive || !state.behavioural.challenge) return;
     const canvas = document.getElementById('behavioural-canvas');
     const rect = canvas.getBoundingClientRect();
@@ -189,18 +230,27 @@ function handleMove(e) {
 
     state.behavioural.trajectory.push({ x, y, t });
 
-    const c = state.behavioural.challenge;
-    // Allow collecting waypoints in any order
-    c.waypoints.forEach((wp, i) => {
+    // SECURITY: Waypoints are fetched sequentially from server
+    // Check against currently known waypoints only
+    const waypoints = state.behavioural.waypoints;
+    waypoints.forEach((wp, i) => {
         if (!state.behavioural.visited[i] && Math.sqrt((x - wp.x) ** 2 + (y - wp.y) ** 2) <= 28) {
             state.behavioural.visited[i] = true;
             document.getElementById('waypoints-visited').textContent = state.behavioural.visited.filter(v => v).length;
+
+            // SECURITY: Fetch next waypoint after hitting current one
+            if (state.behavioural.nextWaypointToFetch < state.behavioural.challenge.num_waypoints) {
+                fetchNextWaypoint().then(() => drawBehavioural());
+            }
         }
     });
 
     drawBehavioural();
 
-    if (state.behavioural.visited.every(v => v)) {
+    // Check if all known waypoints visited and no more to fetch
+    const allVisited = state.behavioural.visited.slice(0, waypoints.length).every(v => v);
+    const allFetched = waypoints.length >= state.behavioural.challenge.num_waypoints;
+    if (allVisited && allFetched) {
         submitBehavioural();
     }
 }
@@ -251,8 +301,9 @@ function drawBehavioural() {
         ctx.shadowBlur = 0;
     }
 
-    // All unvisited waypoints look the same since order doesn't matter
-    c.waypoints.forEach((wp, i) => {
+    // SECURITY: Only draw waypoints that have been revealed by the server
+    const waypoints = state.behavioural.waypoints || [];
+    waypoints.forEach((wp, i) => {
         const visited = state.behavioural.visited[i];
 
         ctx.beginPath();
@@ -286,8 +337,10 @@ async function submitBehavioural() {
     state.behavioural.isActive = false;
     clearInterval(state.behavioural.timerInterval);
 
+    // SECURITY: Include nonce to prevent replay attacks
     const r = await api('/api/challenges/behavioural', 'POST', {
         challenge_id: state.behavioural.challenge.challenge_id,
+        nonce: state.behavioural.nonce,
         trajectory: state.behavioural.trajectory
     });
 

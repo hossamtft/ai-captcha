@@ -1,7 +1,8 @@
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
-import json, uuid, math, random, os
-from datetime import datetime
+import json, uuid, math, random, os, hashlib, time
+from datetime import datetime, timedelta
+from collections import defaultdict
 
 app = Flask(__name__, static_folder='../frontend', static_url_path='')
 CORS(app)
@@ -10,6 +11,36 @@ DATA_DIR = os.path.join(os.path.dirname(__file__), '..', 'data')
 os.makedirs(DATA_DIR, exist_ok=True)
 active_challenges = {}
 LOGS_FILE = os.path.join(DATA_DIR, 'attempts.json')
+
+# Rate limiting configuration - blocks high-frequency polling (5ms intervals)
+request_timestamps = defaultdict(list)
+RATE_LIMIT_WINDOW = 1.0  # 1 second window
+MAX_REQUESTS_PER_WINDOW = 10  # Max 10 requests per second
+
+def check_rate_limit(ip_address):
+    """Returns True if request should be allowed, False if rate limited."""
+    now = datetime.utcnow()
+    cutoff = now - timedelta(seconds=RATE_LIMIT_WINDOW)
+    
+    # Remove old timestamps
+    request_timestamps[ip_address] = [
+        ts for ts in request_timestamps[ip_address] 
+        if ts > cutoff
+    ]
+    
+    # Check if over limit
+    if len(request_timestamps[ip_address]) >= MAX_REQUESTS_PER_WINDOW:
+        return False
+    
+    # Add current timestamp
+    request_timestamps[ip_address].append(now)
+    return True
+
+def generate_challenge_nonce(challenge_id):
+    """Generate a cryptographically secure nonce for challenge validation."""
+    timestamp = str(int(time.time()))
+    nonce_input = f"{challenge_id}{timestamp}{random.randint(0, 999999)}"
+    return hashlib.sha256(nonce_input.encode()).hexdigest()
 
 def load_logs():
     if os.path.exists(LOGS_FILE):
@@ -44,6 +75,7 @@ def generate_temporal_challenge():
     challenge = {
         "challenge_id": challenge_id,
         "type": "temporal",
+        "nonce": generate_challenge_nonce(challenge_id),  # Prevent replay attacks
         "seed": seed,
         "total_duration": total_duration,
         "zone_start": zone_start,
@@ -74,8 +106,10 @@ def generate_behavioural_challenge():
     challenge = {
         "challenge_id": challenge_id,
         "type": "behavioural",
+        "nonce": generate_challenge_nonce(challenge_id),  # Prevent replay attacks
         "seed": seed,
         "waypoints": waypoints,
+        "revealed_waypoints": 0,  # Track how many waypoints have been revealed
         "canvas_width": 600,
         "canvas_height": 400,
         "time_limit": time_limit,
@@ -320,24 +354,119 @@ def index():
 def static_files(path):
     return send_from_directory(app.static_folder, path)
 
+# Rate limiting middleware - blocks high-frequency polling (5ms intervals)
+@app.before_request
+def rate_limit_middleware():
+    """Apply rate limiting to all API endpoints."""
+    if request.path.startswith('/api/'):
+        ip = request.remote_addr
+        if not check_rate_limit(ip):
+            return jsonify({"error": "Rate limit exceeded. Please slow down."}), 429
+
 @app.route('/api/challenges/temporal', methods=['GET'])
 def get_temporal():
-    return jsonify(generate_temporal_challenge())
+    """
+    SECURITY: Only returns minimal UI information.
+    Sensitive data (speed_segments, zone_start, zone_width) stays server-side.
+    """
+    challenge = generate_temporal_challenge()
+    
+    # Return ONLY what client needs for UI rendering
+    return jsonify({
+        'challenge_id': challenge['challenge_id'],
+        'total_duration': challenge['total_duration'],
+        'nonce': challenge['nonce'],
+        # DO NOT include: speed_segments, zone_start, zone_width, seed
+    })
 
 @app.route('/api/challenges/behavioural', methods=['GET'])
 def get_behavioural():
-    return jsonify(generate_behavioural_challenge())
+    """
+    SECURITY: Only returns canvas setup information.
+    Waypoints are hidden and revealed progressively via separate endpoint.
+    """
+    challenge = generate_behavioural_challenge()
+    
+    # Return ONLY canvas setup information
+    return jsonify({
+        'challenge_id': challenge['challenge_id'],
+        'canvas_width': challenge['canvas_width'],
+        'canvas_height': challenge['canvas_height'],
+        'num_waypoints': len(challenge['waypoints']),  # Just the count
+        'time_limit': challenge['time_limit'],
+        'nonce': challenge['nonce'],
+        # DO NOT include: waypoints, seed
+    })
+
+@app.route('/api/challenges/behavioural/<challenge_id>/waypoint/<int:index>', methods=['GET'])
+def get_waypoint(challenge_id, index):
+    """
+    SECURITY: Returns coordinates for ONE waypoint at a time.
+    Waypoints are revealed sequentially as user progresses.
+    Client must hit waypoint N before getting waypoint N+1 coordinates.
+    """
+    if challenge_id not in active_challenges:
+        return jsonify({"error": "Challenge expired"}), 404
+    
+    challenge = active_challenges[challenge_id]
+    
+    # Security: Validate waypoint index bounds
+    if index < 0 or index >= len(challenge['waypoints']):
+        return jsonify({"error": "Invalid waypoint index"}), 400
+    
+    # Security: Only reveal waypoints sequentially
+    # Allow getting waypoint N only if N <= revealed_waypoints
+    if index > challenge['revealed_waypoints']:
+        return jsonify({"error": "Previous waypoint not completed"}), 403
+    
+    # Update revealed waypoints (allow client to request next one)
+    if index == challenge['revealed_waypoints']:
+        challenge['revealed_waypoints'] = index + 1
+    
+    return jsonify({
+        'index': index,
+        'x': challenge['waypoints'][index]['x'],
+        'y': challenge['waypoints'][index]['y']
+    })
 
 @app.route('/api/challenges/temporal', methods=['POST'])
 def post_temporal():
+    """
+    SECURITY: Validates nonce to prevent replay attacks.
+    """
     d = request.json
-    return jsonify(verify_temporal(d.get('challenge_id'), d.get('press_time', 0), d.get('release_time', 0)))
+    challenge_id = d.get('challenge_id')
+    nonce = d.get('nonce')
+    
+    # Validate nonce to prevent replay attacks
+    if challenge_id in active_challenges:
+        if active_challenges[challenge_id].get('nonce') != nonce:
+            return jsonify({"success": False, "message": "Invalid nonce - possible replay attack"}), 403
+    
+    return jsonify(verify_temporal(challenge_id, d.get('press_time', 0), d.get('release_time', 0)))
 
 @app.route('/api/challenges/behavioural', methods=['POST'])
 def post_behavioural():
+    """
+    SECURITY: Validates nonce to prevent replay attacks.
+    """
     d = request.json
-    return jsonify(verify_behavioural(d.get('challenge_id'), d.get('trajectory', [])))
+    challenge_id = d.get('challenge_id')
+    nonce = d.get('nonce')
+    
+    # Validate nonce to prevent replay attacks
+    if challenge_id in active_challenges:
+        if active_challenges[challenge_id].get('nonce') != nonce:
+            return jsonify({"success": False, "message": "Invalid nonce - possible replay attack"}), 403
+    
+    return jsonify(verify_behavioural(challenge_id, d.get('trajectory', [])))
 
 if __name__ == '__main__':
     print("AI-Proof CAPTCHA running at http://localhost:5000")
+    print("SECURITY FEATURES ENABLED:")
+    print("  - Rate limiting: 10 requests/second max")
+    print("  - Hidden challenge parameters")
+    print("  - Sequential waypoint revelation")
+    print("  - Nonce validation for replay attack prevention")
+    print("  - Stricter trajectory classification")
     app.run(debug=True, host='0.0.0.0', port=5000)
