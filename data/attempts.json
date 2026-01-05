@@ -7769,5 +7769,33 @@
     "visual_hold_time": 2637.5,
     "accuracy": 0,
     "created_at": "2025-12-31T15:18:15.150331"
+  },
+  {
+    "challenge_id": "ce474df6-41e0-4f45-b7e0-64511677365e",
+    "type": "temporal",
+    "result": "pass",
+    "real_hold_time": 2160,
+    "visual_hold_time": 2636.1,
+    "accuracy": 86.0,
+    "created_at": "2025-12-31T15:28:19.884785"
+  },
+  {
+    "challenge_id": "b3ae46ab-8116-4cab-8d5b-b8a009cd9e45",
+    "type": "temporal",
+    "result": "pass",
+    "real_hold_time": 2081,
+    "visual_hold_time": 2627.2,
+    "accuracy": 83.8,
+    "created_at": "2025-12-31T15:28:27.427683"
+  },
+  {
+    "challenge_id": "0b09004b-00dd-4d96-9d2c-45c6223114e8",
+    "type": "behavioural",
+    "result": "pass",
+    "confidence": 100,
+    "waypoints_hit": 5,
+    "in_order": true,
+    "time": 2845,
+    "created_at": "2025-12-31T15:28:33.383156"
   }
 ]

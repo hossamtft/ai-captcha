@@ -31,7 +31,6 @@ def generate_temporal_challenge():
     zone_width = random.randint(250, 450)
     zone_start_pct = random.uniform(0.25, 0.65)
     zone_start = int(total_duration * zone_start_pct)
-    flicker_speed = random.randint(300, 500)
     
     speed_segments = []
     remaining = total_duration
@@ -49,9 +48,7 @@ def generate_temporal_challenge():
         "total_duration": total_duration,
         "zone_start": zone_start,
         "zone_width": zone_width,
-        "flicker_speed": flicker_speed,
         "speed_segments": speed_segments,
-        "tolerance": 100,
         "created_at": datetime.utcnow().isoformat()
     }
     active_challenges[challenge_id] = challenge
