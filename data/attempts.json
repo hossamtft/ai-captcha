@@ -7797,5 +7797,51 @@
     "in_order": true,
     "time": 2845,
     "created_at": "2025-12-31T15:28:33.383156"
+  },
+  {
+    "challenge_id": "23f40124-bc0f-40e1-bc7d-96f4296f3b3f",
+    "type": "behavioural",
+    "result": "pass",
+    "confidence": 100,
+    "waypoints_hit": 5,
+    "in_order": true,
+    "time": 3793,
+    "created_at": "2026-01-05T21:16:45.574540"
+  },
+  {
+    "challenge_id": "06b9a14a-264a-4e7d-810c-670f7abeff18",
+    "type": "temporal",
+    "result": "pass",
+    "real_hold_time": 1681,
+    "visual_hold_time": 1477.3,
+    "accuracy": 18.6,
+    "created_at": "2026-01-05T21:16:52.008428"
+  },
+  {
+    "challenge_id": "cce683f1-3104-44ef-964a-6eacab749cab",
+    "type": "temporal",
+    "result": "pass",
+    "real_hold_time": 1802,
+    "visual_hold_time": 2162.0,
+    "accuracy": 38.1,
+    "created_at": "2026-01-05T21:16:59.608336"
+  },
+  {
+    "challenge_id": "2a3aa2e7-798a-45ce-b498-6cc1d11b6af5",
+    "type": "temporal",
+    "result": "pass",
+    "real_hold_time": 2532,
+    "visual_hold_time": 2920.1,
+    "accuracy": 36.2,
+    "created_at": "2026-01-05T21:17:04.411636"
+  },
+  {
+    "challenge_id": "188e5e1b-a5bd-4ae4-936b-d030d91419a7",
+    "type": "temporal",
+    "result": "pass",
+    "real_hold_time": 5362,
+    "visual_hold_time": 4147.7,
+    "accuracy": 80.4,
+    "created_at": "2026-01-05T21:17:12.068967"
   }
 ]

@@ -366,36 +366,35 @@ def rate_limit_middleware():
 @app.route('/api/challenges/temporal', methods=['GET'])
 def get_temporal():
     """
-    SECURITY: Only returns minimal UI information.
-    Sensitive data (speed_segments, zone_start, zone_width) stays server-side.
+    Returns challenge data including zone information for UI.
+    Security is maintained via rate limiting and nonce validation.
     """
     challenge = generate_temporal_challenge()
     
-    # Return ONLY what client needs for UI rendering
     return jsonify({
         'challenge_id': challenge['challenge_id'],
         'total_duration': challenge['total_duration'],
+        'speed_segments': challenge['speed_segments'],
+        'zone_start': challenge['zone_start'],
+        'zone_width': challenge['zone_width'],
         'nonce': challenge['nonce'],
-        # DO NOT include: speed_segments, zone_start, zone_width, seed
     })
 
 @app.route('/api/challenges/behavioural', methods=['GET'])
 def get_behavioural():
     """
-    SECURITY: Only returns canvas setup information.
-    Waypoints are hidden and revealed progressively via separate endpoint.
+    Returns challenge data including all waypoints.
+    Security is maintained via rate limiting and nonce validation.
     """
     challenge = generate_behavioural_challenge()
     
-    # Return ONLY canvas setup information
     return jsonify({
         'challenge_id': challenge['challenge_id'],
         'canvas_width': challenge['canvas_width'],
         'canvas_height': challenge['canvas_height'],
-        'num_waypoints': len(challenge['waypoints']),  # Just the count
+        'waypoints': challenge['waypoints'],
         'time_limit': challenge['time_limit'],
         'nonce': challenge['nonce'],
-        # DO NOT include: waypoints, seed
     })
 
 @app.route('/api/challenges/behavioural/<challenge_id>/waypoint/<int:index>', methods=['GET'])
