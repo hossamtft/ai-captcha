@@ -193,10 +193,9 @@ function startBehavioural() {
     state.behavioural.timerInterval = setInterval(() => {
         const elapsed = (Date.now() - state.behavioural.startTime) / 1000;
         document.getElementById('time-elapsed').textContent = elapsed.toFixed(1);
-        // Time limit disabled for testing
-        // if (elapsed * 1000 >= c.time_limit) {
-        //     submitBehavioural();
-        // }
+        if (elapsed * 1000 >= c.time_limit) {
+            submitBehavioural();
+        }
     }, 100);
 }
 
